@@ -13,7 +13,7 @@ import urllib
 import urlparse
 import sys
 import logging
-import logging.handlers
+from logging.handlers import SysLogHandler
 
 from threading import Thread
 from Crypto.Cipher import AES
@@ -191,12 +191,15 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         pass
-    #     self.serverlogger.info('ok here i am')
 
     def do_GET(self):
         (scm, netloc, path, params, query, fragment) = urlparse.urlparse(self.path, 'http')
+
+        host = str(self.client_address[0])
+        port = str(self.client_address[1])
+
         if scm != 'http':
-            self.server.logger.log(logging.WARNING, '501: The server does not support the facility required.')
+            self.server.logger.log(logging.WARNING, 'Host: ' + host + ':' + port + ' Resp: 501: The server does not support the facility required.')
             self.send_error(501, "The server does not support the facility required.")
             return
         if (path != '/wsapi/2.0/verify') and (path != '/wsapi/2.0/oathverify'):
@@ -239,7 +242,7 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                                 result = 't=' + iso_time + '\r\notp=' + getData['otp'] + '\r\nstatus=NO_CLIENT\r\n'
                     except KeyError:
                         pass
-                    self.server.logger.log(logging.INFO, 'h='  + otp_hmac + ', ' + result.replace('\r', '').replace('\n', ' '))
+                    self.server.logger.log(logging.INFO, 'Host: ' + host + ':' + port + ' Resp: h='  + otp_hmac + ', ' + result.replace('\r', '').replace('\n', ' '))
                     self.wfile.write('h=' + otp_hmac + '\r\n' + result + '\r\n')
                     return
 
@@ -263,7 +266,7 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                         otp_hmac = hmac.new(api_key, msg=orderedResult, digestmod=hashlib.sha1).hexdigest().decode('hex').encode('base64').strip()
             except KeyError:
                 pass
-            self.server.logger.log(logging.INFO, 'h=' + otp_hmac + ', ' + result.replace('\r', '').replace('\n', ' '))
+            self.server.logger.log(logging.INFO, 'Host: ' + host + ':' + port + ' Resp: h=' + otp_hmac + ', ' + result.replace('\r', '').replace('\n', ' '))
             self.wfile.write('h=' + otp_hmac + '\r\n' + result + '\r\n')
             return
 
@@ -302,7 +305,7 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                                 result = 'otp=' + getData['otp'] + '\r\nstatus=NO_CLIENT\r\nt=' + iso_time
                     except KeyError:
                         pass
-                    self.server.logger.log(logging.INFO, result.replace('\r', '').replace('\n', ' ') + ', h=' + otp_hmac)
+                    self.server.logger.log(logging.INFO, 'Host: ' + host + ':' + port + ' Resp: ' + result.replace('\r', '').replace('\n', ' ') + ', h=' + otp_hmac)
                     self.wfile.write(result + '\r\nh=' + otp_hmac)
                     return
                 else:
@@ -322,7 +325,7 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                                 otp_hmac = hmac.new(api_key, msg=result, digestmod=hashlib.sha1).hexdigest().decode('hex').encode('base64').strip()
                     except KeyError:
                         pass
-                    self.server.logger.log(logging.INFO, 'h=' + otp_hmac + ', ' + result.replace('\r', '').replace('\n', ' '))
+                    self.server.logger.log(logging.INFO, 'Host: ' + host + ':' + port + ' Resp: h=' + otp_hmac + ', ' + result.replace('\r', '').replace('\n', ' '))
                     self.wfile.write('h=' + otp_hmac + '\r\n' + result)
                     return
             except KeyError:
@@ -343,7 +346,7 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                         otp_hmac = hmac.new(api_key, msg=result, digestmod=hashlib.sha1).hexdigest().decode('hex').encode('base64').strip()
             except KeyError:
                 pass
-            self.server.logger.log(logging.INFO, 'h=' + otp_hmac + ', ' + result.replace('\r', '').replace('\n', ' '))
+            self.server.logger.log(logging.INFO, 'Host: ' + host + ':' + port + ' Resp: h=' + otp_hmac + ', ' + result.replace('\r', '').replace('\n', ' '))
             self.wfile.write('h=' + otp_hmac + '\r\n' + result)
             return
 
@@ -395,8 +398,9 @@ if __name__ == "__main__":
 
     logger = logging.getLogger('yubiserve')
     logger.setLevel(logging.INFO)
-    sh = logging.handlers.SysLogHandler(address='/dev/log') #'localhost', 514))
-    logger.addHandler(sh)
+    syslog = SysLogHandler(address='/dev/log', facility=logging.handlers.SysLogHandler.LOG_DAEMON)
+    syslog.setFormatter(logging.Formatter('%(name)s: [%(levelname)s] %(message)s'))
+    logger.addHandler(syslog)
 
     yubiserveHTTP = ThreadingHTTPServer((config['yubiserveHOST'], config['yubiservePORT']), YubiServeHandler, logger)
     yubiserveSSL = ThreadingHTTPSServer((config['yubiserveHOST'], config['yubiserveSSLPORT']), YubiServeHandler)
