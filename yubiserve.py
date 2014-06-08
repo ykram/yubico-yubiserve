@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2.7
 # coding: utf-8
 
 import BaseHTTPServer
@@ -11,6 +11,7 @@ import socket
 import time
 import urllib
 import urlparse
+import syslog
 
 from threading import Thread
 from Crypto.Cipher import AES
@@ -23,7 +24,7 @@ try:
 except ImportError:
     pass
 try:
-    import sqlite
+    import sqlite3
 except ImportError:
     pass
 
@@ -168,7 +169,7 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
     global config
     #try:
     if config['yubiDB'] == 'sqlite':
-        con = sqlite.connect(os.path.dirname(os.path.realpath(__file__)) + '/yubikeys.sqlite')
+        con = sqlite3.connect(os.path.dirname(os.path.realpath(__file__)) + '/yubikeys.sqlite')
     elif config['yubiDB'] == 'mysql':
         con = MySQLdb.connect(host=config['yubiMySQLHost'], user=config['yubiMySQLUser'], passwd=config['yubiMySQLPass'], db=config['yubiMySQLName'])
     #except:
@@ -368,7 +369,7 @@ except NameError:
     isThereMysql = False
 
 try:
-    if sqlite != None:
+    if sqlite3 != None:
         isThereSqlite = True
 except NameError:
     isThereSqlite = False
@@ -394,6 +395,7 @@ http_thread.start()
 ssl_thread.start()
 
 print "HTTP Server is running."
+syslog.openlog('yubiserve', logoption=syslog.LOG_PID, facility=syslog.LOG_DAEMON)
 
 while 1:
     time.sleep(1)
