@@ -11,7 +11,9 @@ import socket
 import time
 import urllib
 import urlparse
-import syslog
+import sys
+import logging
+import logging.handlers
 
 from threading import Thread
 from Crypto.Cipher import AES
@@ -43,7 +45,6 @@ def parseConfigFile():  # Originally I wrote this function to parse PHP configur
     return keys
 
 config = parseConfigFile()
-
 
 class OATHValidator(crypto.OATHValidator):
 
@@ -190,10 +191,12 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         pass
+    #     self.serverlogger.info('ok here i am')
 
     def do_GET(self):
         (scm, netloc, path, params, query, fragment) = urlparse.urlparse(self.path, 'http')
         if scm != 'http':
+            self.server.logger.log(logging.WARNING, '501: The server does not support the facility required.')
             self.send_error(501, "The server does not support the facility required.")
             return
         if (path != '/wsapi/2.0/verify') and (path != '/wsapi/2.0/oathverify'):
@@ -236,6 +239,7 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                                 result = 't=' + iso_time + '\r\notp=' + getData['otp'] + '\r\nstatus=NO_CLIENT\r\n'
                     except KeyError:
                         pass
+                    self.server.logger.log(logging.INFO, 'h='  + otp_hmac + ', ' + result.replace('\r', '').replace('\n', ' '))
                     self.wfile.write('h=' + otp_hmac + '\r\n' + result + '\r\n')
                     return
 
@@ -259,7 +263,7 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                         otp_hmac = hmac.new(api_key, msg=orderedResult, digestmod=hashlib.sha1).hexdigest().decode('hex').encode('base64').strip()
             except KeyError:
                 pass
-
+            self.server.logger.log(logging.INFO, 'h=' + otp_hmac + ', ' + result.replace('\r', '').replace('\n', ' '))
             self.wfile.write('h=' + otp_hmac + '\r\n' + result + '\r\n')
             return
 
@@ -298,6 +302,7 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                                 result = 'otp=' + getData['otp'] + '\r\nstatus=NO_CLIENT\r\nt=' + iso_time
                     except KeyError:
                         pass
+                    self.server.logger.log(logging.INFO, result.replace('\r', '').replace('\n', ' ') + ', h=' + otp_hmac)
                     self.wfile.write(result + '\r\nh=' + otp_hmac)
                     return
                 else:
@@ -317,6 +322,7 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                                 otp_hmac = hmac.new(api_key, msg=result, digestmod=hashlib.sha1).hexdigest().decode('hex').encode('base64').strip()
                     except KeyError:
                         pass
+                    self.server.logger.log(logging.INFO, 'h=' + otp_hmac + ', ' + result.replace('\r', '').replace('\n', ' '))
                     self.wfile.write('h=' + otp_hmac + '\r\n' + result)
                     return
             except KeyError:
@@ -337,6 +343,7 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                         otp_hmac = hmac.new(api_key, msg=result, digestmod=hashlib.sha1).hexdigest().decode('hex').encode('base64').strip()
             except KeyError:
                 pass
+            self.server.logger.log(logging.INFO, 'h=' + otp_hmac + ', ' + result.replace('\r', '').replace('\n', ' '))
             self.wfile.write('h=' + otp_hmac + '\r\n' + result)
             return
 
@@ -358,45 +365,56 @@ class SecureHTTPServer(BaseHTTPServer.HTTPServer):
         self.server_activate()
 
 class ThreadingHTTPServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
-    pass
+    def __init__ (self, server_address, RequestHandlerClass, logger=None):
+        BaseHTTPServer.HTTPServer.__init__ (self, server_address, RequestHandlerClass)
+        self.logger = logger
+
 class ThreadingHTTPSServer(SocketServer.ThreadingMixIn, SecureHTTPServer):
     pass
 
-try:
-    if MySQLdb != None:
-        isThereMysql = True
-except NameError:
-    isThereMysql = False
+if __name__ == "__main__":
+    try:
+        if MySQLdb != None:
+            isThereMysql = True
+    except NameError:
+        isThereMysql = False
 
-try:
-    if sqlite3 != None:
-        isThereSqlite = True
-except NameError:
-    isThereSqlite = False
+    try:
+        if sqlite3 != None:
+            isThereSqlite = True
+    except NameError:
+        isThereSqlite = False
 
-if isThereMysql == isThereSqlite == False:
-    print "Cannot continue without any database support.\nPlease read README.\n\n"
-    quit()
+    if isThereMysql == isThereSqlite == False:
+        print "Cannot continue without any database support.\nPlease read README.\n\n"
+        quit()
 
-if config['yubiDB'] == 'mysql' and (config['yubiMySQLHost'] == '' or config['yubiMySQLUser'] == '' or config['yubiMySQLPass'] == '' or config['yubiMySQLName'] == ''):
-    print "Cannot continue without any MySQL configuration.\nPlease read README.\n\n"
-    quit()
+    if config['yubiDB'] == 'mysql' and (config['yubiMySQLHost'] == '' or config['yubiMySQLUser'] == '' or config['yubiMySQLPass'] == '' or config['yubiMySQLName'] == ''):
+        print "Cannot continue without any MySQL configuration.\nPlease read README.\n\n"
+        quit()
 
-yubiserveHTTP = ThreadingHTTPServer((config['yubiserveHOST'], config['yubiservePORT']), YubiServeHandler)
-yubiserveSSL = ThreadingHTTPSServer((config['yubiserveHOST'], config['yubiserveSSLPORT']), YubiServeHandler)
+    logger = logging.getLogger('yubiserve')
+    logger.setLevel(logging.INFO)
+    sh = logging.handlers.SysLogHandler(address='/dev/log') #'localhost', 514))
+    logger.addHandler(sh)
 
-http_thread = Thread(target=yubiserveHTTP.serve_forever)
-ssl_thread = Thread(target=yubiserveSSL.serve_forever)
+    yubiserveHTTP = ThreadingHTTPServer((config['yubiserveHOST'], config['yubiservePORT']), YubiServeHandler, logger)
+    yubiserveSSL = ThreadingHTTPSServer((config['yubiserveHOST'], config['yubiserveSSLPORT']), YubiServeHandler)
 
-http_thread.setDaemon(True)
-ssl_thread.setDaemon(True)
+    http_thread = Thread(target=yubiserveHTTP.serve_forever)
+    ssl_thread = Thread(target=yubiserveSSL.serve_forever)
 
-http_thread.start()
-ssl_thread.start()
+    http_thread.setDaemon(True)
+    ssl_thread.setDaemon(True)
 
-print "HTTP Server is running."
-syslog.openlog('yubiserve', logoption=syslog.LOG_PID, facility=syslog.LOG_DAEMON)
+    http_thread.start()
+    ssl_thread.start()
 
-while 1:
-    time.sleep(1)
+    logger.log(logging.INFO, sys.argv[0] + ' HTTP Server is Running')
+
+    print 'HTTP Server is running on ' + str(config['yubiserveHOST']) + ':' + str(config['yubiservePORT'])
+    print 'HTTPS Server is running on ' + str(config['yubiserveHOST']) + ':' + str(config['yubiserveSSLPORT'])
+
+    while 1:
+        time.sleep(1)
 
