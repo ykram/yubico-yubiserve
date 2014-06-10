@@ -51,19 +51,11 @@ class OATHValidator(crypto.OATHValidator):
     def __init__(self, connection):
         cur = connection.cursor()
         def dbread(publicID):
-            cur.execute("""
-                SELECT  counter, secret
-                  FROM  oathtokens
-                 WHERE  publicname = %s AND active = '1'
-                 """, (publicID,))
+            cur.execute("SELECT counter, secret FROM oathtokens WHERE publicname=? AND active='1'", (publicID))
             return cur
 
         def dbwrite(counter, publicID):
-            cur.execute("""
-                UPDATE  oathtokens
-                   SET  counter = %s
-                 WHERE  publicname = %s AND active = '1'
-                 """, (counter, publicID))
+            cur.execute("UPDATE oathtokens SET counter=? WHERE publicname=? AND active = '1'", (counter, publicID))
             connection.commit()
 
         return super(OATHValidator, self).__init__(dbread, dbwrite)
@@ -126,7 +118,8 @@ class OTPValidation():
                 self.userid = match.group(1)
                 self.token = self.modhex2hex(match.group(2))
                 cur = self.con.cursor()
-                cur.execute('SELECT aeskey, internalname FROM yubikeys WHERE publicname = "' + self.userid + '" AND active = "1"')
+                #cur.execute('SELECT aeskey, internalname FROM yubikeys WHERE publicname = "' + self.userid + '" AND active = "1"')
+                cur.execute('SELECT aeskey, internalname FROM yubikeys WHERE publicname=? AND active=1', (self.userid))
                 if (cur.rowcount != 1):
                     self.validationResult = self.status['BAD_OTP']
                     return self.validationResult
@@ -141,7 +134,8 @@ class OTPValidation():
                     return self.validationResult
                 self.internalcounter = self.hexdec(self.plaintext[14:16] + self.plaintext[12:14] + self.plaintext[22:24])
                 self.timestamp = self.hexdec(self.plaintext[20:22] + self.plaintext[18:20] + self.plaintext[16:18])
-                cur.execute('SELECT counter, time FROM yubikeys WHERE publicname = "' + self.userid + '" AND active = "1"')
+                #cur.execute('SELECT counter, time FROM yubikeys WHERE publicname = "' + self.userid + '" AND active = "1"')
+                cur.execute('SELECT counter, time FROM yubikeys WHERE publicname=? AND active="1"', (self.userid))
                 if (cur.rowcount != 1):
                     self.validationResult = self.status['BAD_OTP']
                     return self.validationResult
@@ -156,7 +150,8 @@ class OTPValidation():
             self.validationResult = self.status['BAD_OTP']
             return self.validationResult
         self.validationResult = self.status['OK']
-        cur.execute('UPDATE yubikeys SET counter = ' + str(self.internalcounter) + ', time = ' + str(self.timestamp) + ' WHERE publicname = "' + self.userid + '"')
+        #cur.execute('UPDATE yubikeys SET counter = ' + str(self.internalcounter) + ', time = ' + str(self.timestamp) + ' WHERE publicname = "' + self.userid + '"')
+        cur.execute('UPDATE yubikeys SET counter=?, time=? WHERE publicname=?', (str(self.internalcounter), str(self.timestamp), self.userid))
         self.con.commit()
         return self.validationResult
 
@@ -233,9 +228,11 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                         if (getData['id'] != None):
                             apiID = re.escape(getData['id'])
                             cur = self.con.cursor()
-                            cur.execute("SELECT COUNT(secret) FROM apikeys WHERE id = '" + apiID + "'")
+                            #cur.execute("SELECT COUNT(secret) FROM apikeys WHERE id = '" + apiID + "'")
+                            cur.execute("SELECT COUNT(secret) FROM apikeys WHERE id=?", (apiID))
                             rows = cur.fetchone()[0]
-                            cur.execute("SELECT secret FROM apikeys WHERE id = '" + apiID + "'")
+                            #cur.execute("SELECT secret FROM apikeys WHERE id = '" + apiID + "'")
+                            cur.execute("SELECT secret FROM apikeys WHERE id=?", (apiID))
                             if rows != 0:
                                 api_key = cur.fetchone()[0]
                                 otp_hmac = hmac.new(api_key, msg=orderedResult, digestmod=hashlib.sha1).hexdigest().decode('hex').encode('base64').strip()
@@ -261,9 +258,11 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                 if (getData['id'] != None):
                     apiID = re.escape(getData['id'])
                     cur = self.con.cursor()
-                    cur.execute("SELECT COUNT(secret) FROM apikeys WHERE id = '" + apiID + "'")
+                    #cur.execute("SELECT COUNT(secret) FROM apikeys WHERE id = '" + apiID + "'")
+                    cur.execute("SELECT COUNT(secret) FROM apikeys WHERE id=?",  (apiID))
                     rows = cur.fetchone()[0]
-                    cur.execute("SELECT secret FROM apikeys WHERE id = '" + apiID + "'")
+                    #cur.execute("SELECT secret FROM apikeys WHERE id = '" + apiID + "'")
+                    cur.execute("SELECT secret FROM apikeys WHERE id=?", (apiID))
                     if rows != 0:
                         api_key = cur.fetchone()[0]
                         otp_hmac = hmac.new(api_key, msg=orderedResult, digestmod=hashlib.sha1).hexdigest().decode('hex').encode('base64').strip()
@@ -300,9 +299,11 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                         if (getData['id'] != None):
                             apiID = re.escape(getData['id'])
                             cur = self.con.cursor()
-                            cur.execute("SELECT COUNT(secret) FROM apikeys WHERE id = '" + apiID + "'")
+                            #cur.execute("SELECT COUNT(secret) FROM apikeys WHERE id = '" + apiID + "'")
+                            cur.execute("SELECT COUNT(secret) FROM apikeys WHERE id=?", (apiID))
                             rows = cur.fetchone()[0]
-                            cur.execute("SELECT secret FROM apikeys WHERE id = '" + apiID + "'")
+                            #cur.execute("SELECT secret FROM apikeys WHERE id = '" + apiID + "'")
+                            cur.execute("SELECT secret FROM apikeys WHERE id=?", (apiID))  
                             if rows != 0:
                                 api_key = cur.fetchone()[0]
                                 otp_hmac = hmac.new(api_key, msg=result, digestmod=hashlib.sha1).hexdigest().decode('hex').encode('base64').strip()
@@ -324,9 +325,11 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                         if (getData['id'] != None):
                             apiID = re.escape(getData['id'])
                             cur = self.con.cursor()
-                            cur.execute("SELECT COUNT(secret) FROM apikeys WHERE id = '" + apiID + "'")
+                            #cur.execute("SELECT COUNT(secret) FROM apikeys WHERE id = '" + apiID + "'")
+                            cur.execute("SELECT COUNT(secret) FROM apikeys WHERE id=?", (apiID))
                             rows = cur.fetchone()[0]
-                            cur.execute("SELECT secret FROM apikeys WHERE id = '" + apiID + "'")
+                            #cur.execute("SELECT secret FROM apikeys WHERE id = '" + apiID + "'")
+                            cur.execute("SELECT secret FROM apikeys WHERE id=?", (apiID))
                             if rows != 0:
                                 api_key = cur.fetchone()[0]
                                 otp_hmac = hmac.new(api_key, msg=result, digestmod=hashlib.sha1).hexdigest().decode('hex').encode('base64').strip()
@@ -347,9 +350,11 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                 if (getData['id'] != None):
                     apiID = re.escape(getData['id'])
                     cur = self.con.cursor()
-                    cur.execute("SELECT COUNT(secret) from apikeys WHERE id = '" + apiID + "'")
+                    #cur.execute("SELECT COUNT(secret) from apikeys WHERE id = '" + apiID + "'")
+                    cur.execute("SELECT COUNT(secret) FROM apikeys WHERE id=?", (apiID))
                     rows = cur.fetchone()[0]
-                    cur.execute("SELECT secret from apikeys WHERE id = '" + apiID + "'")
+                    #cur.execute("SELECT secret from apikeys WHERE id = '" + apiID + "'")
+                    cur.execute("SELECT secret FROM apikeys WHERE id=?", (apiID))
                     if rows != 0:
                         api_key = cur.fetchone()[0]
                         otp_hmac = hmac.new(api_key, msg=result, digestmod=hashlib.sha1).hexdigest().decode('hex').encode('base64').strip()
