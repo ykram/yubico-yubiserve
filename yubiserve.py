@@ -70,7 +70,6 @@ class OATHValidator(crypto.OATHValidator):
 
 
 class OTPValidation():
-
     def __init__(self, connection):
         self.status = {'OK': 1, 'BAD_OTP': 2, 'REPLAYED_OTP': 3, 'DELAYED_OTP': 4, 'NO_CLIENT': 5}
         self.validationResult = 0
@@ -169,7 +168,7 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
 
     global config
     #try:
-    if config['yubiDB'] == 'sqlite':
+    if config['yubiDB'] == 'sqlite3':
         con = sqlite3.connect(os.path.dirname(os.path.realpath(__file__)) + '/yubikeys.sqlite')
     elif config['yubiDB'] == 'mysql':
         con = MySQLdb.connect(host=config['yubiMySQLHost'], user=config['yubiMySQLUser'], passwd=config['yubiMySQLPass'], db=config['yubiMySQLName'])
@@ -234,8 +233,10 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                         if (getData['id'] != None):
                             apiID = re.escape(getData['id'])
                             cur = self.con.cursor()
-                            cur.execute("SELECT secret from apikeys WHERE id = '" + apiID + "'")
-                            if cur.rowcount != 0:
+                            cur.execute("SELECT COUNT(secret) FROM apikeys WHERE id = '" + apiID + "'")
+                            rows = cur.fetchone()[0]
+                            cur.execute("SELECT secret FROM apikeys WHERE id = '" + apiID + "'")
+                            if rows != 0:
                                 api_key = cur.fetchone()[0]
                                 otp_hmac = hmac.new(api_key, msg=orderedResult, digestmod=hashlib.sha1).hexdigest().decode('hex').encode('base64').strip()
                             else:
@@ -260,8 +261,10 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                 if (getData['id'] != None):
                     apiID = re.escape(getData['id'])
                     cur = self.con.cursor()
-                    cur.execute("SELECT secret from apikeys WHERE id = '" + apiID + "'")
-                    if cur.rowcount != 0:
+                    cur.execute("SELECT COUNT(secret) FROM apikeys WHERE id = '" + apiID + "'")
+                    rows = cur.fetchone()[0]
+                    cur.execute("SELECT secret FROM apikeys WHERE id = '" + apiID + "'")
+                    if rows != 0:
                         api_key = cur.fetchone()[0]
                         otp_hmac = hmac.new(api_key, msg=orderedResult, digestmod=hashlib.sha1).hexdigest().decode('hex').encode('base64').strip()
             except KeyError:
@@ -297,8 +300,10 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                         if (getData['id'] != None):
                             apiID = re.escape(getData['id'])
                             cur = self.con.cursor()
-                            cur.execute("SELECT secret from apikeys WHERE id = '" + apiID + "'")
-                            if cur.rowcount != 0:
+                            cur.execute("SELECT COUNT(secret) FROM apikeys WHERE id = '" + apiID + "'")
+                            rows = cur.fetchone()[0]
+                            cur.execute("SELECT secret FROM apikeys WHERE id = '" + apiID + "'")
+                            if rows != 0:
                                 api_key = cur.fetchone()[0]
                                 otp_hmac = hmac.new(api_key, msg=result, digestmod=hashlib.sha1).hexdigest().decode('hex').encode('base64').strip()
                             else:
@@ -319,8 +324,10 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                         if (getData['id'] != None):
                             apiID = re.escape(getData['id'])
                             cur = self.con.cursor()
-                            cur.execute("SELECT secret from apikeys WHERE id = '" + apiID + "'")
-                            if cur.rowcount != 0:
+                            cur.execute("SELECT COUNT(secret) FROM apikeys WHERE id = '" + apiID + "'")
+                            rows = cur.fetchone()[0]
+                            cur.execute("SELECT secret FROM apikeys WHERE id = '" + apiID + "'")
+                            if rows != 0:
                                 api_key = cur.fetchone()[0]
                                 otp_hmac = hmac.new(api_key, msg=result, digestmod=hashlib.sha1).hexdigest().decode('hex').encode('base64').strip()
                     except KeyError:
@@ -340,8 +347,10 @@ class YubiServeHandler (BaseHTTPServer.BaseHTTPRequestHandler):
                 if (getData['id'] != None):
                     apiID = re.escape(getData['id'])
                     cur = self.con.cursor()
+                    cur.execute("SELECT COUNT(secret) from apikeys WHERE id = '" + apiID + "'")
+                    rows = cur.fetchone()[0]
                     cur.execute("SELECT secret from apikeys WHERE id = '" + apiID + "'")
-                    if cur.rowcount != 0:
+                    if rows != 0:
                         api_key = cur.fetchone()[0]
                         otp_hmac = hmac.new(api_key, msg=result, digestmod=hashlib.sha1).hexdigest().decode('hex').encode('base64').strip()
             except KeyError:
@@ -403,21 +412,21 @@ if __name__ == "__main__":
     logger.addHandler(syslog)
 
     yubiserveHTTP = ThreadingHTTPServer((config['yubiserveHOST'], config['yubiservePORT']), YubiServeHandler, logger)
-    yubiserveSSL = ThreadingHTTPSServer((config['yubiserveHOST'], config['yubiserveSSLPORT']), YubiServeHandler)
+#    yubiserveSSL = ThreadingHTTPSServer((config['yubiserveHOST'], config['yubiserveSSLPORT']), YubiServeHandler)
 
     http_thread = Thread(target=yubiserveHTTP.serve_forever)
-    ssl_thread = Thread(target=yubiserveSSL.serve_forever)
+#    ssl_thread = Thread(target=yubiserveSSL.serve_forever)
 
     http_thread.setDaemon(True)
-    ssl_thread.setDaemon(True)
+#    ssl_thread.setDaemon(True)
 
     http_thread.start()
-    ssl_thread.start()
+#    ssl_thread.start()
 
     logger.log(logging.INFO, sys.argv[0] + ' HTTP Server is Running')
 
     print 'HTTP Server is running on ' + str(config['yubiserveHOST']) + ':' + str(config['yubiservePORT'])
-    print 'HTTPS Server is running on ' + str(config['yubiserveHOST']) + ':' + str(config['yubiserveSSLPORT'])
+#    print 'HTTPS Server is running on ' + str(config['yubiserveHOST']) + ':' + str(config['yubiserveSSLPORT'])
 
     while 1:
         time.sleep(1)
